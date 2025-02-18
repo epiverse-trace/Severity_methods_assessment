@@ -53,8 +53,10 @@ plot(marburg_onset_death)
 
 # Deaths up to real-time point: we don't really know when deaths happened and if using real-time point, deaths > cases
 # therefore choosing to include deaths for cases that happened up until 21 days before real-time point (considering delay of onset-death)
-deaths_rt <- Marburg_EqGuinea_linelist %>% filter(Onset_week <= as.Date(real_time) - 21) %>% filter(Status == "dead") %>% summarise(deaths = length(Case_id))
+# deaths_rt <- Marburg_EqGuinea_linelist %>% filter(Onset_week <= as.Date(real_time) - 21) %>% filter(Status == "dead") %>% summarise(deaths = length(Case_id))
 
+# Actual number of deaths in real-time from situation report on 22/03/23
+deaths_rt$deaths <- 27
 
 ### A) Allocation of cases to first day of the week ####
 
