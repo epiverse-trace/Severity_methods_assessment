@@ -38,7 +38,7 @@ ci_bayes <- function(x, n, conf.level = 0.95) {
   return(ci)
 }
 #Setting a date mid-outbreak for real-time simulation
-real_time <- "2023-03-09"
+real_time <- "2023-03-22"
 
 #Defining MVD onset to death delay
 set.seed(1)
