@@ -32,9 +32,9 @@ ci_bayes <- function(x, n, conf.level = 0.95) {
 
   # Format the output
   est <- c(bin_out$mean, bin_out$lower, bin_out$upper)
-  ci <- paste0(round(100 * est[1], 2), "% (",
-               round(100 * est[2], 2), "-",
-               round(100 * est[3], 2), ")")
+  ci <- paste0(round(100 * est[1]), "% (",
+               round(100 * est[2]), "-",
+               round(100 * est[3]), ")")
   return(ci)
 }
 #Setting a date mid-outbreak for real-time simulation
