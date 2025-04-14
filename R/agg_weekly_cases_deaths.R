@@ -46,7 +46,7 @@ onset_death <- epiparameter_db(
 #config <- create_config(time_varying_death_risk = function(risk, time) risk * exp(-0.1 * time))
 
 # simulating linelist
-set.seed(10)
+set.seed(2)
 linelist <- sim_linelist(
   contact_distribution = contact_distribution,
   infectious_period = infectious_period,
@@ -120,9 +120,12 @@ df_transformed <- daily_cases_deaths %>%
 
 #### Without uncertainty (using estimated outcomes and then dividing, w/o. having to round up cases)
 outcomes_aggregated <- estimate_outcomes(df_transformed, delay_density = function(x) density(onset_death, x))
-outcomes_aggregated$cfr <- outcomes_aggregated$deaths / outcomes_aggregated$estimated_outcomes
+outcomes_aggregated$cum_outcomes <- cumsum(outcomes_aggregated$estimated_outcomes)
+outcomes_aggregated$cum_deaths <- cumsum(outcomes_aggregated$deaths)
+outcomes_aggregated$cfr_rolling <- outcomes_aggregated$cum_deaths / outcomes_aggregated$cum_outcomes
+outcomes_aggregated$cfr_tv <- outcomes_aggregated$deaths / outcomes_aggregated$estimated_outcomes
 
-#### With uncertainty (using cfr_rolling and cfr_time_varying, first having to round up cases)
+#### With uncertainty (using cfr_rolling and cfr_time_varying)
 # Rolling cfr
 cfr_aggregated_rolling <- cfr_rolling(df_transformed, delay_density = function(x) density(onset_death, x))
 
@@ -146,7 +149,10 @@ weekly_avg <- df_transformed %>%
 
 #### Without uncertainty (using estimated outcomes and then dividing, w/o. having to round up cases)
 outcomes_averaged <- estimate_outcomes(weekly_avg, delay_density = function(x) density(onset_death, x))
-outcomes_averaged$cfr <- outcomes_averaged$deaths / outcomes_averaged$estimated_outcomes
+outcomes_averaged$cum_outcomes <- cumsum(outcomes_averaged$estimated_outcomes)
+outcomes_averaged$cum_deaths <- cumsum(outcomes_averaged$deaths)
+outcomes_averaged$cfr_rolling <- outcomes_averaged$cum_deaths / outcomes_averaged$cum_outcomes
+outcomes_averaged$cfr_tv <- outcomes_averaged$deaths / outcomes_averaged$estimated_outcomes
 
 #### With uncertainty (using cfr_rolling and cfr_time_varying, first having to round up cases)
 #Rolling cfr
@@ -202,7 +208,6 @@ names(I_deaths)= "deaths"
 
 #Now using reconstructed daily incidence and deaths to estimate CFR
 #First we create the data frame for {cfr} with daily incidence and the corresponding dates
-
 daily_rec_incidence <- bind_cols(daily_inc$date_index, I_inc)
 names(daily_rec_incidence)[1]= "date"
 daily_rec_deaths <- bind_cols(daily_deaths$date_index, I_deaths)
@@ -216,7 +221,10 @@ lines(daily_rec_data$date,daily_rec_data$deaths, type = "l", col="red")
 
 #### Without uncertainty (using estimated outcomes and then dividing, w/o. having to round up cases)
 outcomes_rec <- estimate_outcomes(daily_rec_data, delay_density = function(x) density(onset_death, x))
-outcomes_rec$cfr <- outcomes_rec$deaths / outcomes_rec$estimated_outcomes
+outcomes_rec$cum_outcomes <- cumsum(outcomes_rec$estimated_outcomes)
+outcomes_rec$cum_deaths <- cumsum(outcomes_rec$deaths)
+outcomes_rec$cfr_rolling <- outcomes_rec$cum_deaths / outcomes_rec$cum_outcomes
+outcomes_rec$cfr_tv <- outcomes_rec$deaths / outcomes_rec$estimated_outcomes
 outcomes_rec$date <- as.Date(outcomes_rec$date)
 
 #### With uncertainty (using cfr_rolling and cfr_time_varying, first having to round up cases)
@@ -238,14 +246,16 @@ data_for_cfr$date <- as.Date(data_for_cfr$date)
 
 ### Without uncertainty
 outcomes_linelist <- estimate_outcomes(data_for_cfr, delay_density = function(x) density(onset_death, x))
-outcomes_linelist$cfr <- outcomes_linelist$deaths/outcomes_linelist$estimated_outcomes
+outcomes_linelist$cum_outcomes <- cumsum(outcomes_linelist$estimated_outcomes)
+outcomes_linelist$cum_deaths <- cumsum(outcomes_linelist$deaths)
+outcomes_linelist$cfr_rolling <- outcomes_linelist$cum_deaths / outcomes_linelist$cum_outcomes
+outcomes_linelist$cfr_tv <- outcomes_linelist$deaths / outcomes_linelist$estimated_outcomes
 
 ### With uncertainty
 cfr_linelist_rolling <- cfr_rolling(data_for_cfr, delay_density = function(x) density(onset_death, x))
 cfr_linelist_tv <- cfr_time_varying(data_for_cfr, delay_density = function(x) density(onset_death, x))
 
 #### Plots with uncertainty #####
-
 plot_rolling_linelist <- ggplot(cfr_linelist_rolling) +
   geom_ribbon(
     aes(x = date, ymin = severity_low, ymax = severity_high),
@@ -253,9 +263,11 @@ plot_rolling_linelist <- ggplot(cfr_linelist_rolling) +
   geom_line(
     aes(x = date, y = severity_estimate), colour = "royalblue4"
   ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  labs(x="", y = "CFR") +
+  ggtitle("A") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"),
+        axis.text.x = element_text(angle = 1, hjust = 1))
 
 plot_tv_linelist <- ggplot(cfr_linelist_tv) +
   geom_ribbon(
@@ -269,16 +281,17 @@ plot_tv_linelist <- ggplot(cfr_linelist_tv) +
   ) + theme_bw()
 
 #### Plots rolling cfr
-plot_reconstructed_rolling <- ggplot(cfr_reconstructed_rolling) +
+plot_reconstructed_rolling <- ggplot(cfr_linelist_rolling) +
   geom_ribbon(
     aes(x = date, ymin = severity_low, ymax = severity_high),
     alpha = 0.5, fill = "deepskyblue3") +
   geom_line(
     aes(x = date, y = severity_estimate), colour = "royalblue4"
   ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  labs(x = "", y = "") +
+  ggtitle("B") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
 plot_aggregated_rolling <- ggplot(cfr_aggregated_rolling) +
   geom_ribbon(
@@ -287,9 +300,10 @@ plot_aggregated_rolling <- ggplot(cfr_aggregated_rolling) +
   geom_line(
     aes(x = date, y = severity_estimate), colour = "royalblue4"
   ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  labs(x = "", y = "") +
+  ggtitle("B") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
 plot_averaged_rolling <- ggplot(cfr_averaged_rolling) +
   geom_ribbon(
@@ -298,91 +312,105 @@ plot_averaged_rolling <- ggplot(cfr_averaged_rolling) +
   geom_line(
     aes(x = date, y = severity_estimate), colour = "royalblue4"
   ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  labs(x = "", y = "") +
+  ggtitle("B") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
 grid.arrange(plot_rolling_linelist, plot_aggregated_rolling, plot_averaged_rolling, plot_reconstructed_rolling, nrow = 1,
-             top = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
+             bottom = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
 
 ### Plots time-varying cfr
-plot_reconstructed_tv <- ggplot(cfr_reconstructed_tv) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+plot_linelist_tv <- ggplot(outcomes_linelist) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x="", y = "CFR") +
+  ggtitle("A") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"),
+        axis.text.x = element_text(angle = 1, hjust = 1))
 
-plot_aggregated_tv <- ggplot(cfr_aggregated_tv) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+plot_aggregated_tv <- ggplot(outcomes_aggregated) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("B") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
-plot_averaged_tv <- ggplot(cfr_averaged_tv) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+plot_averaged_tv <- ggplot(outcomes_averaged) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("C") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
-grid.arrange(plot_tv_linelist, plot_aggregated_tv, plot_averaged_tv, plot_reconstructed_tv, nrow = 1,
-             top = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
+plot_reconstructed_tv <- ggplot(outcomes_rec) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +  # Keep only x-label for the bottom-most plot
+  ggtitle("D") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
+grid.arrange(plot_linelist_tv, plot_aggregated_tv, plot_averaged_tv, plot_reconstructed_tv, nrow = 1,
+             bottom = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
 
 
-#### Plots without uncertainty #####
-
+#### Plots without uncertainty- rolling cfr #####
 plot_linelist <- ggplot(outcomes_linelist) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
-
-plot_reconstructed <- ggplot(outcomes_rec) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x="", y = "CFR") +
+  ggtitle("A") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"),
+        axis.text.x = element_text(angle = 1, hjust = 1))
 
 plot_aggregated <- ggplot(outcomes_aggregated) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) + # Values >1
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("B") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
 plot_averaged <- ggplot(outcomes_averaged) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("C") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
-grid.arrange(plot_linelist, plot_aggregated, plot_averaged, plot_reconstructed, nrow = 1,
-             top = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
+plot_reconstructed <- ggplot(outcomes_rec) +
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +  # Keep only x-label for the bottom-most plot
+  ggtitle("D") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
+
+# Arrange plots with a shared title
+grid.arrange(plot_linelist, plot_aggregated, plot_averaged, plot_reconstructed,
+             nrow = 1,
+             bottom = "A) From linelist; B) From aggregated on day 1; C) From averaged cases; D) From reconstructed incidence")
 
 ######### Option 2: Short delay with varying infection dynamics ##############
 
@@ -408,16 +436,19 @@ infectious_period <- epiparameter::epiparameter(
 )
 
 # create onset to death
-onset_death_short <- epiparameter_db(
-  disease = "Ebola",
-  epi_name = "onset_to_death",
-  single_epiparameter = TRUE)
+onset_death_short <- epiparameter(
+  disease = "COVID-19",
+  epi_name = "onset to death",
+  prob_distribution = create_prob_distribution(
+    prob_distribution = "lnorm",
+    prob_distribution_params = c(meanlog = 1.25, sdlog = 0.5))
+)
 
 # defining time-varying cfr
 #config <- create_config(time_varying_death_risk = function(risk, time) risk * exp(-0.1 * time))
 
 # simulating linelist
-set.seed(1)
+set.seed(2)
 linelist_s <- sim_linelist(
   contact_distribution = contact_distribution,
   infectious_period = infectious_period,
@@ -491,7 +522,10 @@ df_transformed_s <- daily_cases_deaths_s %>%
 
 #### Without uncertainty (using estimated outcomes and then dividing, w/o. having to round up cases)
 outcomes_aggregated_s <- estimate_outcomes(df_transformed_s, delay_density = function(x) density(onset_death_short, x))
-outcomes_aggregated_s$cfr <- outcomes_aggregated_s$deaths / outcomes_aggregated_s$estimated_outcomes
+outcomes_aggregated_s$cum_outcomes <- cumsum(outcomes_aggregated_s$estimated_outcomes)
+outcomes_aggregated_s$cum_deaths <- cumsum(outcomes_aggregated_s$deaths)
+outcomes_aggregated_s$cfr_rolling <- outcomes_aggregated_s$cum_deaths / outcomes_aggregated_s$cum_outcomes
+outcomes_aggregated_s$cfr_tv <- outcomes_aggregated_s$deaths / outcomes_aggregated_s$estimated_outcomes
 
 #### With uncertainty (using cfr_rolling and cfr_time_varying, first having to round up cases)
 # Rolling cfr
@@ -517,7 +551,10 @@ weekly_avg_s <- df_transformed_s %>%
 
 #### Without uncertainty (using estimated outcomes and then dividing, w/o. having to round up cases)
 outcomes_averaged_s <- estimate_outcomes(weekly_avg_s, delay_density = function(x) density(onset_death_short, x))
-outcomes_averaged_s$cfr <- outcomes_averaged_s$deaths / outcomes_averaged_s$estimated_outcomes
+outcomes_averaged_s$cum_outcomes <- cumsum(outcomes_averaged_s$estimated_outcomes)
+outcomes_averaged_s$cum_deaths <- cumsum(outcomes_averaged_s$deaths)
+outcomes_averaged_s$cfr_rolling <- outcomes_averaged_s$cum_deaths / outcomes_averaged_s$cum_outcomes
+outcomes_averaged_s$cfr_tv <- outcomes_averaged_s$deaths / outcomes_averaged_s$estimated_outcomes
 
 #### With uncertainty (using cfr_rolling and cfr_time_varying, first having to round up cases)
 #Rolling cfr
@@ -573,7 +610,6 @@ names(I_deaths_s)= "deaths"
 
 #Now using reconstructed daily incidence and deaths to estimate CFR
 #First we create the data frame for {cfr} with daily incidence and the corresponding dates
-
 daily_rec_incidence_s <- bind_cols(daily_inc_s$date_index, I_inc_s)
 names(daily_rec_incidence_s)[1]= "date"
 daily_rec_deaths_s <- bind_cols(daily_deaths_s$date_index, I_deaths_s)
@@ -587,7 +623,10 @@ lines(daily_rec_data_s$date,daily_rec_data_s$deaths, type = "l", col="red")
 
 #### Without uncertainty (using estimated outcomes and then dividing, w/o. having to round up cases)
 outcomes_rec_s <- estimate_outcomes(daily_rec_data_s, delay_density = function(x) density(onset_death_short, x))
-outcomes_rec_s$cfr <- outcomes_rec_s$deaths / outcomes_rec_s$estimated_outcomes
+outcomes_rec_s$cum_outcomes <- cumsum(outcomes_rec_s$estimated_outcomes)
+outcomes_rec_s$cum_deaths <- cumsum(outcomes_rec_s$deaths)
+outcomes_rec_s$cfr_rolling <- outcomes_rec_s$cum_deaths / outcomes_rec_s$cum_outcomes
+outcomes_rec_s$cfr_tv <- outcomes_rec_s$deaths / outcomes_rec_s$estimated_outcomes
 outcomes_rec_s$date <- as.Date(outcomes_rec_s$date)
 
 #### With uncertainty (using cfr_rolling and cfr_time_varying, first having to round up cases)
@@ -596,7 +635,7 @@ daily_rec_data_s[,2:3] <- round(daily_rec_data_s[,2:3])
 daily_rec_data_s$date <- as.Date(daily_rec_data_s$date)
 
 #Rolling cfr
-cfr_reconstructed_rolling_s <- cfr_rolling(daily_rec_data_s, delay_density = function(x) density(onset_death_short, x), poisson_threshold = 101)
+cfr_reconstructed_rolling_s <- cfr_rolling(daily_rec_data_s, delay_density = function(x) density(onset_death_short, x), poisson_threshold = 100)
 
 #Time-varying cfr
 cfr_reconstructed_tv_s <- cfr_time_varying(daily_rec_data_s, delay_density = function(x) density(onset_death_short, x))
@@ -609,14 +648,16 @@ data_for_cfr_s$date <- as.Date(data_for_cfr_s$date)
 
 ### Without uncertainty
 outcomes_linelist_s <- estimate_outcomes(data_for_cfr_s, delay_density = function(x) density(onset_death_short, x))
-outcomes_linelist_s$cfr <- outcomes_linelist_s$deaths/outcomes_linelist_s$estimated_outcomes
+outcomes_linelist_s$cum_outcomes <- cumsum(outcomes_linelist_s$estimated_outcomes)
+outcomes_linelist_s$cum_deaths <- cumsum(outcomes_linelist_s$deaths)
+outcomes_linelist_s$cfr_rolling <- outcomes_linelist_s$cum_deaths / outcomes_linelist_s$cum_outcomes
+outcomes_linelist_s$cfr_tv <- outcomes_linelist_s$deaths / outcomes_linelist_s$estimated_outcomes
 
 ### With uncertainty
-cfr_linelist_rolling_s <- cfr_rolling(data_for_cfr_s[11:62,], delay_density = function(x) density(onset_death_short, x), poisson_threshold = 150)
+cfr_linelist_rolling_s <- cfr_rolling(data_for_cfr_s, delay_density = function(x) density(onset_death_short, x), poisson_threshold = 100)
 cfr_linelist_tv_s <- cfr_time_varying(data_for_cfr_s, delay_density = function(x) density(onset_death_short, x))
 
 #### Plots with uncertainty #####
-
 plot_rolling_linelist_s <- ggplot(cfr_linelist_rolling_s) +
   geom_ribbon(
     aes(x = date, ymin = severity_low, ymax = severity_high),
@@ -624,10 +665,13 @@ plot_rolling_linelist_s <- ggplot(cfr_linelist_rolling_s) +
   geom_line(
     aes(x = date, y = severity_estimate), colour = "royalblue4"
   ) +
-  scale_x_date(date_labels = "%b-%Y") +
+  scale_x_date(date_labels = "%d-%m-%Y") +
   scale_y_continuous(limits = c(0, 1)) +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  labs(x="", y = "CFR") +
+  ggtitle("A") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"),
+        axis.text.x = element_text(angle = 1, hjust = 1))
 
 plot_tv_linelist_s <- ggplot(cfr_linelist_tv_s) +
   geom_ribbon(
@@ -636,122 +680,102 @@ plot_tv_linelist_s <- ggplot(cfr_linelist_tv_s) +
   geom_line(
     aes(x = date, y = severity_estimate), colour = "royalblue4"
   ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
-
-#### Plots rolling cfr
-plot_reconstructed_rolling_s <- ggplot(cfr_reconstructed_rolling_s) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
-
-plot_aggregated_rolling_s <- ggplot(cfr_aggregated_rolling_s) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
-
-plot_averaged_rolling_s <- ggplot(cfr_averaged_rolling_s) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
-
-grid.arrange(plot_rolling_linelist_s, plot_aggregated_rolling_s, plot_averaged_rolling_s, plot_reconstructed_rolling_s, nrow = 1,
-             top = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(x="", y = "") +
+  ggtitle("A") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"),
+        axis.text.x = element_text(angle = 1, hjust = 1))
 
 ### Plots time-varying cfr
-plot_reconstructed_tv_s <- ggplot(cfr_reconstructed_tv_s) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+plot_linelist_tv_s <- ggplot(outcomes_linelist_s) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x="", y = "CFR") +
+  ggtitle("A") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"),
+        axis.text.x = element_text(angle = 1, hjust = 1))
 
-plot_aggregated_tv_s <- ggplot(cfr_aggregated_tv_s) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+plot_aggregated_tv_s <- ggplot(outcomes_aggregated_s) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("B") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
-plot_averaged_tv_s <- ggplot(cfr_averaged_tv_s) +
-  geom_ribbon(
-    aes(x = date, ymin = severity_low, ymax = severity_high),
-    alpha = 0.5, fill = "deepskyblue3") +
-  geom_line(
-    aes(x = date, y = severity_estimate), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+plot_averaged_tv_s <- ggplot(outcomes_averaged_s) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("C") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
-grid.arrange(plot_tv_linelist_s, plot_aggregated_tv_s, plot_averaged_tv_s, plot_reconstructed_tv_s, nrow = 1,
-             top = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
+plot_reconstructed_tv_s <- ggplot(outcomes_rec_s) +
+  geom_line(aes(x = date, y = cfr_tv), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +  # Keep only x-label for the bottom-most plot
+  ggtitle("D") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
+grid.arrange(plot_linelist_tv_s, plot_aggregated_tv_s, plot_averaged_tv_s, plot_reconstructed_tv_s, nrow = 1,
+             bottom = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
 
 
-#### Plots without uncertainty #####
-
+#### Plots without uncertainty- rolling cfr #####
 plot_linelist_s <- ggplot(outcomes_linelist_s) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
-
-plot_reconstructed_s <- ggplot(outcomes_rec_s) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x="", y = "CFR") +
+  ggtitle("A") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"),
+        axis.text.x = element_text(angle = 1, hjust = 1))
 
 plot_aggregated_s <- ggplot(outcomes_aggregated_s) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) + # Values >1
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("B") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
 plot_averaged_s <- ggplot(outcomes_averaged_s) +
-  geom_line(
-    aes(x = date, y = cfr), colour = "royalblue4"
-  ) +
-  scale_x_date(date_labels = "%b-%Y") +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(x = "Date", y = "CFR"
-  ) + theme_bw()
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +
+  ggtitle("C") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
 
-grid.arrange(plot_linelist, plot_aggregated, plot_averaged, plot_reconstructed, nrow = 1,
-             top = "1- From linelist; 2- From aggregated on day 1; 3- From averaged cases; 4- From reconstructed incidence")
+plot_reconstructed_s <- ggplot(outcomes_rec_s) +
+  geom_line(aes(x = date, y = cfr_rolling), colour = "royalblue4") +
+  geom_hline(yintercept = 0.219, colour = "red", size = 0.2) +
+  scale_x_date(date_labels = "%d-%m-%Y") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "", y = "") +  # Keep only x-label for the bottom-most plot
+  ggtitle("D") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0, vjust = -1, face = "bold"))
+
+# Arrange plots with a shared title
+grid.arrange(plot_linelist_s, plot_aggregated_s, plot_averaged_s, plot_reconstructed_s,
+             nrow = 1,
+             bottom = "A) From linelist; B) From aggregated on day 1; C) From averaged cases; D) From reconstructed incidence")
